@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
 from uuid import UUID
-from typing import Optional
+from typing import Optional, List
 from app.models.patient import GenderEnum, TreatmentLocationEnum, PatientStatusEnum
 from app.schemas.medication import MedicationResponse
 
@@ -39,3 +39,28 @@ class PatientResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class PatientListItemResponse(BaseModel):
+    """
+    Comentário em pt-BR: schema resumido para listagem de pacientes com metadados agregados
+    """
+    id: UUID
+    name: str
+    process_number: Optional[str]
+    gender: GenderEnum
+    age: int
+    current_cycle_number: int
+    last_session_date: Optional[datetime]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PatientsListResponse(BaseModel):
+    """
+    Comentário em pt-BR: envelope com resultados paginados por página clássica
+    """
+    items: List[PatientListItemResponse]
+    page: int
+    page_size: int
+    total: int
+    has_next: bool

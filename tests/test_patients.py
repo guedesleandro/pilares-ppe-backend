@@ -30,17 +30,52 @@ def create_medication(client, headers, suffix: str):
     return response.json()
 
 
-def create_patient(client, headers, medication_id, name):
+def create_patient(client, headers, medication_id, name, birth_date="1985-06-15"):
     payload = {
         "name": name,
         "gender": "female",
-        "birth_date": "1985-06-15",
+        "birth_date": birth_date,
         "process_number": f"PROC-{uuid.uuid4().hex[:6]}",
         "treatment_location": "clinic",
         "status": "active",
         "preferred_medication_id": medication_id,
     }
     response = client.post("/patients", json=payload, headers=headers)
+    assert response.status_code == 201
+    return response.json()
+
+
+def create_cycle(client, headers, patient_id, max_sessions=4):
+    payload = {
+        "patient_id": patient_id,
+        "max_sessions": max_sessions,
+        "periodicity": "weekly",
+        "type": "normal",
+    }
+    response = client.post("/cycles", json=payload, headers=headers)
+    assert response.status_code == 201
+    return response.json()
+
+
+def create_session(client, headers, cycle_id, medication_id, session_date):
+    payload = {
+        "cycle_id": cycle_id,
+        "session_date": session_date,
+        "notes": "Sessão automática para testes",
+        "medication_id": medication_id,
+        "body_composition": {
+            "weight_kg": 80.5,
+            "fat_percentage": 32.1,
+            "fat_kg": 25.8,
+            "muscle_mass_kg": 40.3,
+            "h2o_percentage": 55.2,
+            "metabolic_age": 35,
+            "visceral_fat": 10,
+        },
+    }
+    response = client.post(
+        f"/cycles/{cycle_id}/sessions", json=payload, headers=headers
+    )
     assert response.status_code == 201
     return response.json()
 
@@ -121,5 +156,81 @@ def test_patient_search_with_pagination(client, unique_username):
     paginated_data = paginated_response.json()
     assert len(paginated_data) == 1
     assert paginated_data[0]["name"] == "Ana Clara"
+
+
+def test_patients_listing_with_cursor_and_metadata(client, unique_username):
+    headers = authenticate_client(client, unique_username)
+    medication = create_medication(client, headers, uuid.uuid4().hex[:6])
+
+    patient_a = create_patient(
+        client, headers, medication["id"], "Spec Amanda Nunes", birth_date="1988-01-10"
+    )
+    patient_b = create_patient(
+        client, headers, medication["id"], "Spec Bianca Lima", birth_date="1995-05-20"
+    )
+    patient_c = create_patient(
+        client, headers, medication["id"], "Spec Carla Souza", birth_date="1992-09-30"
+    )
+
+    first_cycle = create_cycle(client, headers, patient_c["id"])
+    second_cycle = create_cycle(client, headers, patient_c["id"])
+
+    create_session(
+        client,
+        headers,
+        second_cycle["id"],
+        medication["id"],
+        "2024-02-02T10:00:00Z",
+    )
+
+    listing_response = client.get(
+        "/patients/listing",
+        params={"page_size": 2, "search": "Spec"},
+        headers=headers,
+    )
+    assert listing_response.status_code == 200
+    data = listing_response.json()
+    assert len(data["items"]) == 2
+    assert data["page"] == 1
+    assert data["page_size"] == 2
+    assert data["has_next"] is True
+    assert data["total"] == 3
+    created_at_values = [item["created_at"] for item in data["items"]]
+    assert created_at_values == sorted(created_at_values, reverse=True)
+
+    next_page_response = client.get(
+        "/patients/listing",
+        params={"page": 2, "page_size": 2, "search": "Spec"},
+        headers=headers,
+    )
+    assert next_page_response.status_code == 200
+    next_page = next_page_response.json()
+    assert len(next_page["items"]) == 1
+    assert next_page["page"] == 2
+    assert next_page["has_next"] is False
+
+    combined_items = data["items"] + next_page["items"]
+    combined_ids = {item["id"] for item in combined_items}
+    assert combined_ids == {patient_a["id"], patient_b["id"], patient_c["id"]}
+    patient_c_item = next(item for item in combined_items if item["id"] == patient_c["id"])
+    assert patient_c_item["current_cycle_number"] == 2
+    assert patient_c_item["last_session_date"].startswith("2024-02-02")
+
+    today = date.today()
+    expected_age = today.year - 1992 - (
+        (today.month, today.day) < (9, 30)
+    )
+    assert patient_c_item["age"] == expected_age
+
+    search_response = client.get(
+        "/patients/listing",
+        params={"search": "Spec Bia"},
+        headers=headers,
+    )
+    assert search_response.status_code == 200
+    search_data = search_response.json()
+    assert len(search_data["items"]) == 1
+    assert search_data["items"][0]["id"] == patient_b["id"]
+    assert search_data["has_next"] is False
 
 

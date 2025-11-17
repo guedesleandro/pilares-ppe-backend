@@ -1,19 +1,38 @@
 from uuid import UUID
-from typing import Optional
+from typing import Optional, List
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func
 
 from app.database import get_db
 from app.models.patient import Patient
 from app.models.medication import Medication
-from app.schemas.patient import PatientCreate, PatientUpdate, PatientResponse
+from app.models.session import Session as SessionModel
+from app.schemas.patient import (
+    PatientCreate,
+    PatientUpdate,
+    PatientResponse,
+    PatientListItemResponse,
+    PatientsListResponse,
+)
 from app.schemas.cycle import CycleResponse
 from app.models.cycle import Cycle
 from app.auth import get_current_user
 from app.schemas.user import UserResponse
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+def _calculate_age(birth_date: date) -> int:
+    """
+    Comentário em pt-BR: calcula idade a partir da data de nascimento
+    """
+    today = date.today()
+    years = today.year - birth_date.year
+    if (today.month, today.day) < (birth_date.month, birth_date.day):
+        years -= 1
+    return years
 
 
 def _validate_medication(
@@ -83,6 +102,95 @@ async def search_patients(
         .all()
     )
     return [PatientResponse.model_validate(patient) for patient in patients]
+
+
+@router.get("/listing", response_model=PatientsListResponse)
+async def list_patients_with_metadata(
+    search: Optional[str] = Query(None, min_length=1, description="Parte do nome"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, gt=0, le=100),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """
+    Comentário em pt-BR: lista pacientes com metadados agregados usando paginação tradicional
+    """
+    cycle_count_subquery = (
+        db.query(
+            Cycle.patient_id.label("patient_id"),
+            func.count(Cycle.id).label("cycle_count"),
+        )
+        .group_by(Cycle.patient_id)
+        .subquery()
+    )
+
+    last_session_subquery = (
+        db.query(
+            Cycle.patient_id.label("patient_id"),
+            func.max(SessionModel.session_date).label("last_session_date"),
+        )
+        .join(SessionModel, SessionModel.cycle_id == Cycle.id)
+        .group_by(Cycle.patient_id)
+        .subquery()
+    )
+
+    base_filter = db.query(Patient)
+    if search:
+        base_filter = base_filter.filter(Patient.name.ilike(f"%{search}%"))
+    total = base_filter.count()
+
+    query = (
+        db.query(
+            Patient,
+            func.coalesce(cycle_count_subquery.c.cycle_count, 0).label(
+                "current_cycle_number"
+            ),
+            last_session_subquery.c.last_session_date.label("last_session_date"),
+        )
+        .outerjoin(
+            cycle_count_subquery, cycle_count_subquery.c.patient_id == Patient.id
+        )
+        .outerjoin(
+            last_session_subquery, last_session_subquery.c.patient_id == Patient.id
+        )
+    )
+
+    if search:
+        query = query.filter(Patient.name.ilike(f"%{search}%"))
+
+    offset_value = (page - 1) * page_size
+
+    results = (
+        query.order_by(Patient.created_at.desc(), Patient.id.desc())
+        .offset(offset_value)
+        .limit(page_size)
+        .all()
+    )
+
+    response_items: List[PatientListItemResponse] = []
+    for patient, current_cycle_number, last_session_date in results:
+        response_items.append(
+            PatientListItemResponse(
+                id=patient.id,
+                name=patient.name,
+                process_number=patient.process_number,
+                gender=patient.gender,
+                age=_calculate_age(patient.birth_date),
+                current_cycle_number=current_cycle_number or 0,
+                last_session_date=last_session_date,
+                created_at=patient.created_at,
+            )
+        )
+
+    has_next = page * page_size < total
+
+    return PatientsListResponse(
+        items=response_items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        has_next=has_next,
+    )
 
 
 @router.get("/{patient_id}", response_model=PatientResponse)
