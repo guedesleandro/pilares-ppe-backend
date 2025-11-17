@@ -152,6 +152,78 @@ def clear_cycles_and_sessions(api_base: str) -> None:
     typer.echo(f"Ciclos removidos: {removed}. Sessões vinculadas foram removidas automaticamente.")
 
 
+def clear_users(api_base: str) -> None:
+    """Remove todos os usuários via API."""
+    token = input("Informe o token JWT: ").strip()
+    confirmation = input(
+        "Tem certeza que deseja remover TODOS os usuários? (y/N): "
+    ).strip().lower()
+    if confirmation != "y":
+        typer.echo("Operação cancelada.")
+        return
+
+    headers = {"Authorization": f"Bearer {token}"}
+    response = httpx.get(f"{api_base}/auth/users", headers=headers, timeout=10)
+    if response.status_code != 200:
+        typer.echo(f"Erro ao listar usuários: {response.text}")
+        return
+
+    users = response.json()
+    if not users:
+        typer.echo("Nenhum usuário encontrado para remoção.")
+        return
+
+    removed = 0
+    for user in users:
+        user_id = user.get("id")
+        delete_response = httpx.delete(
+            f"{api_base}/auth/users/{user_id}", headers=headers, timeout=10
+        )
+        if delete_response.status_code == 204:
+            removed += 1
+        else:
+            typer.echo(f"Falha ao remover usuário {user_id}: {delete_response.text}")
+
+    typer.echo(f"Usuários removidos: {removed}.")
+
+
+def clear_patients(api_base: str) -> None:
+    """Remove todos os pacientes e registros relacionados via API."""
+    token = input("Informe o token JWT: ").strip()
+    confirmation = input(
+        "Tem certeza que deseja remover TODOS os pacientes e dados relacionados? (y/N): "
+    ).strip().lower()
+    if confirmation != "y":
+        typer.echo("Operação cancelada.")
+        return
+
+    headers = {"Authorization": f"Bearer {token}"}
+    response = httpx.get(f"{api_base}/patients", headers=headers, timeout=10)
+    if response.status_code != 200:
+        typer.echo(f"Erro ao listar pacientes: {response.text}")
+        return
+
+    patients = response.json()
+    if not patients:
+        typer.echo("Nenhum paciente encontrado para remoção.")
+        return
+
+    removed = 0
+    for patient in patients:
+        patient_id = patient.get("id")
+        delete_response = httpx.delete(
+            f"{api_base}/patients/{patient_id}", headers=headers, timeout=10
+        )
+        if delete_response.status_code == 204:
+            removed += 1
+        else:
+            typer.echo(f"Falha ao remover paciente {patient_id}: {delete_response.text}")
+
+    typer.echo(
+        f"Pacientes removidos: {removed}. Ciclos, sessões e composições vinculadas foram removidos automaticamente.",
+    )
+
+
 def main() -> None:
     """Menu simples para acessar os endpoints principais."""
     api_base = input(f"Informe a API base [{DEFAULT_API_BASE}]: ").strip() or DEFAULT_API_BASE
@@ -165,6 +237,8 @@ def main() -> None:
             "4 - Criar novo ciclo para um paciente\n"
             "5 - Criar nova sessão em um ciclo\n"
             "6 - Limpar ciclos e sessões\n"
+            "7 - Limpar usuários\n"
+            "8 - Limpar pacientes\n"
             "0 - Sair"
         )
         choice = input("Opção: ").strip()
@@ -181,6 +255,10 @@ def main() -> None:
             create_session(api_base)
         elif choice == "6":
             clear_cycles_and_sessions(api_base)
+        elif choice == "7":
+            clear_users(api_base)
+        elif choice == "8":
+            clear_patients(api_base)
         elif choice == "0":
             typer.echo("Saindo...")
             break

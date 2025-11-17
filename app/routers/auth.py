@@ -1,4 +1,6 @@
 from datetime import timedelta
+from typing import List
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -10,7 +12,8 @@ from app.auth import (
     verify_password,
     get_password_hash,
     create_access_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    get_current_user,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -29,7 +32,7 @@ async def login(
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -69,4 +72,47 @@ async def register(
     db.refresh(new_user)
     
     return UserResponse.model_validate(new_user)
+
+
+@router.get("/me", response_model=UserResponse)
+async def read_current_user(
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """
+    Retorna os dados do usuário autenticado atual
+    """
+    return current_user
+
+
+@router.get("/users", response_model=List[UserResponse])
+async def list_users(
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """
+    Lista todos os usuários (endpoint administrativo)
+    """
+    users = db.query(User).all()
+    return [UserResponse.model_validate(user) for user in users]
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """
+    Deleta um usuário por ID (endpoint administrativo)
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db.delete(user)
+    db.commit()
+    return None
 

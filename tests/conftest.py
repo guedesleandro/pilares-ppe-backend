@@ -47,6 +47,7 @@ def client(db_session):
 
 @pytest.fixture
 def unique_username():
-    return f"user_{uuid.uuid4().hex[:8]}"
+    # Gera um identificador único que também seja um e-mail válido
+    return f"user_{uuid.uuid4().hex[:8]}@example.com"
 
 
