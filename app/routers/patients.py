@@ -2,7 +2,7 @@ from uuid import UUID
 from typing import Optional, List
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 from app.database import get_db
@@ -10,10 +10,12 @@ from app.models.patient import Patient
 from app.models.medication import Medication
 from app.models.session import Session as SessionModel
 from app.schemas.patient import (
+    BodyCompositionSummary,
     PatientCreate,
-    PatientUpdate,
-    PatientResponse,
     PatientListItemResponse,
+    PatientResponse,
+    PatientSummary,
+    PatientUpdate,
     PatientsListResponse,
 )
 from app.schemas.cycle import CycleResponse
@@ -193,6 +195,28 @@ async def list_patients_with_metadata(
     )
 
 
+def _build_body_composition_summary(
+    session: Optional[SessionModel],
+) -> Optional[BodyCompositionSummary]:
+    """
+    Comentário em pt-BR: gera o snapshot da composição corporal comparando sessões
+    """
+    if session is None or session.body_composition is None:
+        return None
+
+    composition = session.body_composition
+    return BodyCompositionSummary(
+        registered_at=composition.created_at,
+        weight_kg=composition.weight_kg,
+        fat_percentage=composition.fat_percentage,
+        fat_kg=composition.fat_kg,
+        muscle_mass_kg=composition.muscle_mass_kg,
+        h2o_percentage=composition.h2o_percentage,
+        metabolic_age=composition.metabolic_age,
+        visceral_fat=composition.visceral_fat,
+    )
+
+
 @router.get("/{patient_id}", response_model=PatientResponse)
 async def get_patient(
     patient_id: UUID,
@@ -260,6 +284,56 @@ async def delete_patient(
     db.delete(patient)
     db.commit()
     return None
+
+
+@router.get("/{patient_id}/summary", response_model=PatientSummary)
+async def get_patient_summary(
+    patient_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """
+    Comentário em pt-BR: retorna a Ficha de Cliente consolidada
+    """
+    patient = (
+        db.query(Patient)
+        .options(joinedload(Patient.preferred_medication))
+        .filter(Patient.id == patient_id)
+        .first()
+    )
+    if not patient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found",
+        )
+
+    session_query = (
+        db.query(SessionModel)
+        .join(Cycle, Cycle.id == SessionModel.cycle_id)
+        .filter(Cycle.patient_id == patient_id)
+        .options(joinedload(SessionModel.body_composition))
+    )
+
+    first_session = session_query.order_by(SessionModel.session_date.asc()).first()
+    last_session = session_query.order_by(SessionModel.session_date.desc()).first()
+
+    summary_payload = {
+        "id": patient.id,
+        "name": patient.name,
+        "process_number": patient.process_number,
+        "birth_date": patient.birth_date,
+        "gender": patient.gender,
+        "treatment_location": patient.treatment_location,
+        "status": patient.status,
+        "preferred_medication": patient.preferred_medication,
+        "created_at": patient.created_at,
+        "first_session_date": first_session.session_date if first_session else None,
+        "last_session_date": last_session.session_date if last_session else None,
+        "body_composition_initial": _build_body_composition_summary(first_session),
+        "body_composition_latest": _build_body_composition_summary(last_session),
+    }
+
+    return PatientSummary.model_validate(summary_payload)
 
 
 @router.get("/{patient_id}/cycles", response_model=List[CycleResponse])

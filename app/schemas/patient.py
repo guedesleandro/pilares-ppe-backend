@@ -1,8 +1,11 @@
-from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
+from decimal import Decimal
+from typing import List, Optional
 from uuid import UUID
-from typing import Optional, List
-from app.models.patient import GenderEnum, TreatmentLocationEnum, PatientStatusEnum
+
+from pydantic import BaseModel, ConfigDict
+
+from app.models.patient import GenderEnum, PatientStatusEnum, TreatmentLocationEnum
 from app.schemas.medication import MedicationResponse
 
 
@@ -64,3 +67,40 @@ class PatientsListResponse(BaseModel):
     page_size: int
     total: int
     has_next: bool
+
+
+class BodyCompositionSummary(BaseModel):
+    """
+    Comentário em pt-BR: resumo da composição corporal para a Ficha de Cliente
+    """
+
+    registered_at: datetime
+    weight_kg: Decimal
+    fat_percentage: Decimal
+    fat_kg: Decimal
+    muscle_mass_kg: Decimal
+    h2o_percentage: Decimal
+    metabolic_age: int
+    visceral_fat: int
+
+
+class PatientSummary(BaseModel):
+    """
+    Comentário em pt-BR: resumo consolidado do paciente para a Ficha de Cliente
+    """
+
+    id: UUID
+    name: str
+    process_number: Optional[str]
+    birth_date: date
+    gender: GenderEnum
+    treatment_location: TreatmentLocationEnum
+    status: PatientStatusEnum
+    preferred_medication: Optional[MedicationResponse]
+    created_at: datetime
+    first_session_date: Optional[datetime]
+    last_session_date: Optional[datetime]
+    body_composition_initial: Optional[BodyCompositionSummary]
+    body_composition_latest: Optional[BodyCompositionSummary]
+
+    model_config = ConfigDict(from_attributes=True)

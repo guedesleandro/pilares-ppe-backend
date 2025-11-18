@@ -1,4 +1,6 @@
 from datetime import date
+from decimal import Decimal
+from typing import Optional
 import uuid
 
 
@@ -57,7 +59,14 @@ def create_cycle(client, headers, patient_id, max_sessions=4):
     return response.json()
 
 
-def create_session(client, headers, cycle_id, medication_id, session_date):
+def create_session(
+    client,
+    headers,
+    cycle_id,
+    medication_id,
+    session_date,
+    body_composition_overrides: Optional[dict] = None,
+):
     payload = {
         "cycle_id": cycle_id,
         "session_date": session_date,
@@ -73,6 +82,8 @@ def create_session(client, headers, cycle_id, medication_id, session_date):
             "visceral_fat": 10,
         },
     }
+    if body_composition_overrides:
+        payload["body_composition"].update(body_composition_overrides)
     response = client.post(
         f"/cycles/{cycle_id}/sessions", json=payload, headers=headers
     )
@@ -232,5 +243,88 @@ def test_patients_listing_with_cursor_and_metadata(client, unique_username):
     assert len(search_data["items"]) == 1
     assert search_data["items"][0]["id"] == patient_b["id"]
     assert search_data["has_next"] is False
+
+
+def test_patient_summary_with_sessions_and_body_composition(client, unique_username):
+    headers = authenticate_client(client, unique_username)
+    medication = create_medication(client, headers, uuid.uuid4().hex[:6])
+    patient = create_patient(
+        client, headers, medication["id"], "Paciente Resumo", birth_date="1990-04-12"
+    )
+    cycle = create_cycle(client, headers, patient["id"])
+
+    first_session = create_session(
+        client,
+        headers,
+        cycle["id"],
+        medication["id"],
+        "2024-01-10T09:00:00Z",
+        body_composition_overrides={
+            "weight_kg": 85.2,
+            "fat_percentage": 28.4,
+            "fat_kg": 24.2,
+            "muscle_mass_kg": 38.1,
+            "h2o_percentage": 52.3,
+            "metabolic_age": 38,
+            "visceral_fat": 12,
+        },
+    )
+    latest_session = create_session(
+        client,
+        headers,
+        cycle["id"],
+        medication["id"],
+        "2024-02-15T09:00:00Z",
+        body_composition_overrides={
+            "weight_kg": 82.7,
+            "fat_percentage": 26.1,
+            "fat_kg": 21.6,
+            "muscle_mass_kg": 39.5,
+            "h2o_percentage": 54.9,
+            "metabolic_age": 36,
+            "visceral_fat": 10,
+        },
+    )
+
+    response = client.get(f"/patients/{patient['id']}/summary", headers=headers)
+    assert response.status_code == 200
+    summary = response.json()
+
+    assert summary["id"] == patient["id"]
+    assert summary["name"] == patient["name"]
+    assert summary["first_session_date"].startswith("2024-01-10")
+    assert summary["last_session_date"].startswith("2024-02-15")
+    assert summary["body_composition_initial"] is not None
+    assert summary["body_composition_latest"] is not None
+
+    initial = summary["body_composition_initial"]
+    latest = summary["body_composition_latest"]
+
+    assert Decimal(initial["weight_kg"]) == Decimal(str(first_session["body_composition"]["weight_kg"]))
+    assert Decimal(latest["weight_kg"]) == Decimal(str(latest_session["body_composition"]["weight_kg"]))
+    assert Decimal(initial["fat_percentage"]) == Decimal("28.4")
+    assert Decimal(latest["fat_percentage"]) == Decimal("26.1")
+
+
+def test_patient_summary_without_sessions_returns_empty_sections(client, unique_username):
+    headers = authenticate_client(client, unique_username)
+    medication = create_medication(client, headers, uuid.uuid4().hex[:6])
+    patient = create_patient(
+        client, headers, medication["id"], "Paciente Sem Sessao", birth_date="1989-11-23"
+    )
+
+    response = client.get(f"/patients/{patient['id']}/summary", headers=headers)
+    assert response.status_code == 200
+    summary = response.json()
+    assert summary["first_session_date"] is None
+    assert summary["last_session_date"] is None
+    assert summary["body_composition_initial"] is None
+    assert summary["body_composition_latest"] is None
+
+
+def test_patient_summary_requires_authentication(client):
+    patient_id = uuid.uuid4()
+    response = client.get(f"/patients/{patient_id}/summary")
+    assert response.status_code == 401
 
 
