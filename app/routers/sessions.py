@@ -1,6 +1,6 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from app.database import get_db
@@ -8,6 +8,8 @@ from app.models.session import Session as SessionModel
 from app.models.cycle import Cycle
 from app.models.medication import Medication
 from app.models.activator import Activator
+from app.models.activator_composition import ActivatorComposition
+from app.models.substance import Substance
 from app.models.body_composition import BodyComposition
 from app.schemas.session import SessionCreate, SessionUpdate, SessionResponse
 from app.auth import get_current_user
@@ -87,8 +89,28 @@ async def create_session(
     db.add(body_composition)
 
     db.commit()
-    db.refresh(new_session)
-    return SessionResponse.model_validate(new_session)
+    
+    # Recarregar a sessão com todos os relacionamentos necessários
+    session_with_relations = (
+        db.query(SessionModel)
+        .options(
+            joinedload(SessionModel.medication),
+            joinedload(SessionModel.activator)
+            .joinedload(Activator.compositions)
+            .joinedload(ActivatorComposition.substance),
+            joinedload(SessionModel.body_composition),
+        )
+        .filter(SessionModel.id == new_session.id)
+        .first()
+    )
+    
+    if not session_with_relations:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reload session after creation"
+        )
+    
+    return SessionResponse.model_validate(session_with_relations)
 
 
 @router.get("/cycles/{cycle_id}/sessions", response_model=List[SessionResponse])
@@ -108,7 +130,18 @@ async def list_cycle_sessions(
             detail="Cycle not found"
         )
     
-    sessions = db.query(SessionModel).filter(SessionModel.cycle_id == cycle_id).all()
+    sessions = (
+        db.query(SessionModel)
+        .options(
+            joinedload(SessionModel.medication),
+            joinedload(SessionModel.activator)
+            .joinedload(Activator.compositions)
+            .joinedload(ActivatorComposition.substance),
+            joinedload(SessionModel.body_composition),
+        )
+        .filter(SessionModel.cycle_id == cycle_id)
+        .all()
+    )
     return [SessionResponse.model_validate(session) for session in sessions]
 
 
@@ -121,7 +154,18 @@ async def get_session(
     """
     Buscar sessão por ID
     """
-    session = db.query(SessionModel).filter(SessionModel.id == session_id).first()
+    session = (
+        db.query(SessionModel)
+        .options(
+            joinedload(SessionModel.medication),
+            joinedload(SessionModel.activator)
+            .joinedload(Activator.compositions)
+            .joinedload(ActivatorComposition.substance),
+            joinedload(SessionModel.body_composition),
+        )
+        .filter(SessionModel.id == session_id)
+        .first()
+    )
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -140,7 +184,12 @@ async def update_session(
     """
     Atualizar sessão
     """
-    session = db.query(SessionModel).filter(SessionModel.id == session_id).first()
+    session = (
+        db.query(SessionModel)
+        .options(joinedload(SessionModel.cycle))
+        .filter(SessionModel.id == session_id)
+        .first()
+    )
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -177,8 +226,28 @@ async def update_session(
                 setattr(session.body_composition, field, value)
     
     db.commit()
-    db.refresh(session)
-    return SessionResponse.model_validate(session)
+    
+    # Recarregar a sessão com todos os relacionamentos necessários
+    session_with_relations = (
+        db.query(SessionModel)
+        .options(
+            joinedload(SessionModel.medication),
+            joinedload(SessionModel.activator)
+            .joinedload(Activator.compositions)
+            .joinedload(ActivatorComposition.substance),
+            joinedload(SessionModel.body_composition),
+        )
+        .filter(SessionModel.id == session_id)
+        .first()
+    )
+    
+    if not session_with_relations:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reload session after update"
+        )
+    
+    return SessionResponse.model_validate(session_with_relations)
 
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

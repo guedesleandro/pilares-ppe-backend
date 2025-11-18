@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 import uuid
@@ -47,14 +47,24 @@ def create_patient(client, headers, medication_id, name, birth_date="1985-06-15"
     return response.json()
 
 
-def create_cycle(client, headers, patient_id, max_sessions=4):
+def create_cycle(
+    client,
+    headers,
+    patient_id,
+    max_sessions=4,
+    cycle_date_iso: Optional[str] = None,
+):
+    if cycle_date_iso is None:
+        cycle_date_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     payload = {
-        "patient_id": patient_id,
         "max_sessions": max_sessions,
         "periodicity": "weekly",
         "type": "normal",
+        "cycle_date": cycle_date_iso,
     }
-    response = client.post("/cycles", json=payload, headers=headers)
+    response = client.post(
+        f"/patients/{patient_id}/cycles", json=payload, headers=headers
+    )
     assert response.status_code == 201
     return response.json()
 

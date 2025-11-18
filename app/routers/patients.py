@@ -18,7 +18,8 @@ from app.schemas.patient import (
     PatientUpdate,
     PatientsListResponse,
 )
-from app.schemas.cycle import CycleResponse
+from app.schemas.cycle import CycleResponse, CycleWithSessionsResponse, CycleForPatientCreate
+from app.schemas.session import SessionResponse
 from app.models.cycle import Cycle
 from app.auth import get_current_user
 from app.schemas.user import UserResponse
@@ -336,23 +337,81 @@ async def get_patient_summary(
     return PatientSummary.model_validate(summary_payload)
 
 
-@router.get("/{patient_id}/cycles", response_model=List[CycleResponse])
-async def list_patient_cycles(
+@router.post(
+    "/{patient_id}/cycles",
+    response_model=CycleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_cycle_for_patient(
     patient_id: UUID,
+    cycle_data: CycleForPatientCreate,
     db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
 ):
     """
-    Listar todos os ciclos de um paciente específico
+    Comentário em pt-BR: cria ciclo vinculado ao paciente usando rota aninhada
     """
-    # Verificar se o paciente existe
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Patient not found"
+            detail="Patient not found",
         )
 
-    cycles = db.query(Cycle).filter(Cycle.patient_id == patient_id).all()
-    return [CycleResponse.model_validate(cycle) for cycle in cycles]
+    cycle_payload = {"patient_id": patient_id, **cycle_data.model_dump()}
+    new_cycle = Cycle(**cycle_payload)
+    db.add(new_cycle)
+    db.commit()
+    db.refresh(new_cycle)
+    return CycleResponse.model_validate(new_cycle)
+
+
+@router.get(
+    "/{patient_id}/cycles", response_model=List[CycleWithSessionsResponse]
+)
+async def list_patient_cycles(
+    patient_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user),
+):
+    """
+    Listar todos os ciclos de um paciente específico com sessões agregadas
+    """
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found",
+        )
+
+    cycles = (
+        db.query(Cycle)
+        .options(
+            joinedload(Cycle.sessions)
+            .joinedload(SessionModel.body_composition),
+            joinedload(Cycle.sessions).joinedload(SessionModel.medication),
+            joinedload(Cycle.sessions).joinedload(SessionModel.activator),
+        )
+        .filter(Cycle.patient_id == patient_id)
+        .order_by(Cycle.cycle_date.desc(), Cycle.created_at.desc())
+        .all()
+    )
+
+    response_payload: List[CycleWithSessionsResponse] = []
+    for cycle in cycles:
+        sorted_sessions = sorted(
+            cycle.sessions, key=lambda session: session.session_date
+        )
+        cycle_base = CycleResponse.model_validate(cycle)
+        response_payload.append(
+            CycleWithSessionsResponse(
+                **cycle_base.model_dump(),
+                sessions=[
+                    SessionResponse.model_validate(session)
+                    for session in sorted_sessions
+                ],
+            )
+        )
+
+    return response_payload
 

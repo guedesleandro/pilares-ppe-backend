@@ -35,6 +35,7 @@ class Cycle(Base):
     max_sessions = Column(Integer, nullable=False)
     periodicity = Column(Enum(PeriodicityEnum), nullable=False)
     type = Column(Enum(CycleTypeEnum), nullable=False, default=CycleTypeEnum.normal)
+    cycle_date = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships

@@ -62,13 +62,15 @@ def test_cycle_and_session_flow(client, unique_username):
 
     # 1. Criar um novo ciclo para um paciente
     cycle_payload = {
-        "patient_id": patient_id,
         "max_sessions": 8,
         "periodicity": "weekly",
         "type": "normal",
+        "cycle_date": "2024-01-10T09:00:00Z",
     }
 
-    create_cycle_response = client.post("/cycles", json=cycle_payload, headers=headers)
+    create_cycle_response = client.post(
+        f"/patients/{patient_id}/cycles", json=cycle_payload, headers=headers
+    )
     assert create_cycle_response.status_code == 201
     created_cycle = create_cycle_response.json()
     cycle_id = created_cycle["id"]
@@ -76,6 +78,7 @@ def test_cycle_and_session_flow(client, unique_username):
     assert created_cycle["max_sessions"] == 8
     assert created_cycle["periodicity"] == "weekly"
     assert created_cycle["type"] == "normal"
+    assert created_cycle["cycle_date"].startswith("2024-01-10T09:00:00")
 
     medication = create_medication(client, headers)
 
@@ -106,6 +109,8 @@ def test_cycle_and_session_flow(client, unique_username):
     assert len(patient_cycles) == 1
     assert patient_cycles[0]["id"] == cycle_id
     assert patient_cycles[0]["patient_id"] == patient_id
+    assert len(patient_cycles[0]["sessions"]) == 1
+    assert patient_cycles[0]["sessions"][0]["id"] == session_id
 
     # 4. Listar as sessões de um ciclo de um paciente
     list_sessions_response = client.get(f"/cycles/{cycle_id}/sessions", headers=headers)
