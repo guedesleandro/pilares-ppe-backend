@@ -9,6 +9,7 @@ from app.routers import (
     substances,
     activators,
     medications,
+    dashboard,
 )
 
 app = FastAPI(title="PPE - Pilares da Saúde API")
@@ -30,6 +31,7 @@ app.include_router(sessions.router)
 app.include_router(substances.router)
 app.include_router(activators.router)
 app.include_router(medications.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/")

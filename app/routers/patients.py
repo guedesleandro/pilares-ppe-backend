@@ -207,7 +207,7 @@ def _build_body_composition_summary(
 
     composition = session.body_composition
     return BodyCompositionSummary(
-        registered_at=composition.created_at,
+        registered_at=session.session_date,
         weight_kg=composition.weight_kg,
         fat_percentage=composition.fat_percentage,
         fat_kg=composition.fat_kg,
