@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -22,7 +22,7 @@ class Session(Base):
         ForeignKey("activators.id", ondelete="RESTRICT"),
         nullable=True,
     )
-    dosage_mg = Column(Integer, nullable=True)
+    dosage_mg = Column(Numeric(precision=10, scale=2), nullable=True)
     session_date = Column(DateTime(timezone=True), nullable=False)
     notes = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

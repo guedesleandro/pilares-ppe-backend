@@ -9,7 +9,6 @@ from app.models.cycle import Cycle
 from app.models.medication import Medication
 from app.models.activator import Activator
 from app.models.activator_composition import ActivatorComposition
-from app.models.substance import Substance
 from app.models.body_composition import BodyComposition
 from app.schemas.session import SessionCreate, SessionUpdate, SessionResponse
 from app.auth import get_current_user

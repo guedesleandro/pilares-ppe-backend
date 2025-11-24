@@ -78,7 +78,7 @@ class BodyCompositionSummary(BaseModel):
     weight_kg: Decimal
     fat_percentage: Decimal
     fat_kg: Decimal
-    muscle_mass_kg: Decimal
+    muscle_mass_percentage: Decimal
     h2o_percentage: Decimal
     metabolic_age: int
     visceral_fat: int

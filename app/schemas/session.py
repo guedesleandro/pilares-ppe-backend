@@ -14,7 +14,7 @@ class SessionCreate(BaseModel):
     notes: Optional[str] = None
     medication_id: UUID
     activator_id: Optional[UUID] = None
-    dosage_mg: Optional[int] = None
+    dosage_mg: Optional[float] = None
     body_composition: BodyCompositionCreate
 
 
@@ -23,7 +23,7 @@ class SessionUpdate(BaseModel):
     notes: Optional[str] = None
     medication_id: Optional[UUID] = None
     activator_id: Optional[UUID] = None
-    dosage_mg: Optional[int] = None
+    dosage_mg: Optional[float] = None
     body_composition: Optional[BodyCompositionCreate] = None
 
 
@@ -32,7 +32,7 @@ class SessionResponse(BaseModel):
     cycle_id: UUID
     medication_id: UUID
     activator_id: Optional[UUID] = None
-    dosage_mg: Optional[int] = None
+    dosage_mg: Optional[float] = None
     session_date: datetime
     notes: Optional[str]
     created_at: datetime

@@ -211,7 +211,7 @@ def _build_body_composition_summary(
         weight_kg=composition.weight_kg,
         fat_percentage=composition.fat_percentage,
         fat_kg=composition.fat_kg,
-        muscle_mass_kg=composition.muscle_mass_kg,
+        muscle_mass_percentage=composition.muscle_mass_percentage,
         h2o_percentage=composition.h2o_percentage,
         metabolic_age=composition.metabolic_age,
         visceral_fat=composition.visceral_fat,

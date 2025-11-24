@@ -30,7 +30,7 @@ class BodyComposition(Base):
     weight_kg = Column(Numeric(7, 2), nullable=False)
     fat_percentage = Column(Numeric(5, 2), nullable=False)
     fat_kg = Column(Numeric(7, 2), nullable=False)
-    muscle_mass_kg = Column(Numeric(7, 2), nullable=False)
+    muscle_mass_percentage = Column(Numeric(5, 2), nullable=False)
     h2o_percentage = Column(Numeric(5, 2), nullable=False)
     metabolic_age = Column(Integer, nullable=False)
     visceral_fat = Column(Integer, nullable=False)

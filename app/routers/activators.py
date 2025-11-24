@@ -90,7 +90,7 @@ async def list_activators(
     """
     Listar todos os ativadores metabólicos
     """
-    activators = db.query(Activator).all()
+    activators = db.query(Activator).order_by(Activator.name).all()
     return [build_activator_response(activator) for activator in activators]
 
 

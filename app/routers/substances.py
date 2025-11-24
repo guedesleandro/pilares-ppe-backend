@@ -42,7 +42,7 @@ async def list_substances(
     """
     Listar todas as substâncias
     """
-    substances = db.query(Substance).all()
+    substances = db.query(Substance).order_by(Substance.name).all()
     return [SubstanceResponse.model_validate(substance) for substance in substances]
 
 

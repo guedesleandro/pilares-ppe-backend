@@ -7,7 +7,7 @@ def build_body_composition_payload(weight_kg: float) -> dict:
         "weight_kg": weight_kg,
         "fat_percentage": 38.5,
         "fat_kg": round(weight_kg * 0.35, 2),
-        "muscle_mass_kg": round(weight_kg * 0.45, 2),
+        "muscle_mass_percentage": 45.0,
         "h2o_percentage": 50.2,
         "metabolic_age": 38,
         "visceral_fat": 12,
